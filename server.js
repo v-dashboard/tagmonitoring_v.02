@@ -1,20 +1,19 @@
-// server.js - API Gateway untuk TiDB Cloud
 const express = require('express');
 const mysql = require('mysql2/promise');
 
 const app = express();
 app.use(express.json());
 
-// Konfigurasi TiDB Cloud (GANTI DENGAN PUNYA KAMU!)
+// Ambil konfigurasi dari Environment Variables
 const dbConfig = {
-    host: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com', // Host TiDB kamu
-    port: 4000,
-    user: 'root', // User kamu
-    password: 'PASSWORD_ANDA', // GANTI!
-    database: 'test'
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT) || 4000,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
 };
 
-// ============ ENDPOINT GET /api/tags ============
+// ============ GET /api/tags ============
 app.get('/api/tags', async (req, res) => {
     let connection;
     try {
@@ -31,7 +30,7 @@ app.get('/api/tags', async (req, res) => {
     }
 });
 
-// ============ ENDPOINT POST /api/tags ============
+// ============ POST /api/tags ============
 app.post('/api/tags', async (req, res) => {
     const tag = req.body;
     let connection;
@@ -54,7 +53,11 @@ app.post('/api/tags', async (req, res) => {
     }
 });
 
-// Jalankan server
+// Health check untuk Render
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`API Gateway running on port ${PORT}`);
