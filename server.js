@@ -1,108 +1,61 @@
-const express = require('express');
-const mysql = require('mysql2/promise');
-const cors = require('cors');
-const path = require('path');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static('.'));
-
-// Ambil config dari Environment Variables Railway
-const dbConfig = {
-    host: process.env.TIDB_HOST,
-    port: parseInt(process.env.TIDB_PORT) || 4000,
-    user: process.env.TIDB_USER,
-    password: process.env.TIDB_PASSWORD,
-    database: process.env.TIDB_DATABASE,
-    ssl: { rejectUnauthorized: true }
-};
-
-console.log('Connecting to TiDB with host:', dbConfig.host);
-
-let pool = null;
-
-async function getDb() {
-    if (!pool) {
-        pool = await mysql.createPool(dbConfig);
-        // Test koneksi
-        const [rows] = await pool.query('SELECT 1 as connected');
-        console.log('✅ TiDB Connected!');
+async function loadData() {
+    try {
+        const response = await fetch('/api/tags');
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        allData = data;
+        console.log('✅ Loaded', allData.length, 'tags from TiDB');
+        return allData;
+    } catch (err) {
+        console.error('❌ Gagal load data:', err);
+        showToast('Gagal konek ke database: ' + err.message, 'error');
+        allData = [];
+        return allData;
     }
-    return pool;
 }
 
-// API endpoints
-app.get('/api/tags', async (req, res) => {
+async function saveData(tagData) {
     try {
-        const db = await getDb();
-        const [rows] = await db.query('SELECT * FROM tags ORDER BY date DESC');
-        res.json(rows);
+        const response = await fetch('/api/tags', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tagData)
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast('✅ Data tersimpan ke TiDB!', 'success');
+            return true;
+        }
+        showToast('❌ Gagal menyimpan', 'error');
+        return false;
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
+        console.error('Gagal save:', err);
+        showToast('❌ Error: ' + err.message, 'error');
+        return false;
     }
-});
+}
 
-app.post('/api/tags', async (req, res) => {
+async function updateTag(tagId, updateData) {
     try {
-        const db = await getDb();
-        const tag = req.body;
-        await db.query(
-            `INSERT INTO tags 
-            (id, date, initial, tag_type, location, machine, abnormality, impact, risk, action, status, wr_number, progress_note, foto_before, foto_after, closed_by, closed_at, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-                tag.id, tag.date, tag.initial, tag.tag_type, tag.location,
-                tag.machine, tag.abnormality, tag.impact, tag.risk,
-                tag.action, tag.status, tag.wr_number || '',
-                tag.progress_note || '', tag.foto_before || null,
-                tag.foto_after || null, tag.closed_by || null,
-                tag.closed_at || null, tag.created_at, tag.updated_at
-            ]
-        );
-        res.json({ success: true, id: tag.id });
+        const response = await fetch(`/api/tags/${tagId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+        });
+        const result = await response.json();
+        if (result.success) {
+            showToast('✅ DATA BERHASIL DIUPDATE', 'success');
+            await refreshData();
+            return true;
+        }
+        showToast('❌ GAGAL UPDATE', 'error');
+        return false;
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
+        console.error('Gagal update:', err);
+        showToast('❌ Error: ' + err.message, 'error');
+        return false;
     }
-});
+}
 
-app.put('/api/tags/:id', async (req, res) => {
-    try {
-        const db = await getDb();
-        const tag = req.body;
-        await db.query(
-            `UPDATE tags SET 
-            status=?, wr_number=?, progress_note=?, foto_after=?,
-            closed_by=?, closed_at=?, updated_at=?
-            WHERE id=?`,
-            [
-                tag.status, tag.wr_number, tag.progress_note,
-                tag.foto_after, tag.closed_by, tag.closed_at,
-                tag.updated_at, req.params.id
-            ]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.delete('/api/tags/:id', async (req, res) => {
-    try {
-        const db = await getDb();
-        await db.query('DELETE FROM tags WHERE id = ?', [req.params.id]);
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server jalan di port ${PORT}`);
-});
+// HAPUS atau KOMENTAR semua kode yang panggil localStorage!
+// Cari dan hapus baris yang ada "localStorage.setItem" atau "localStorage.getItem"
